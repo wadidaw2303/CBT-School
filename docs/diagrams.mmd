@@ -1,0 +1,358 @@
+# CBT-School Diagrams (Mermaid)
+
+> Render with: VS Code Mermaid Preview, GitHub, GitLab, Notion, Obsidian, or https://mermaid.live
+
+---
+
+## 1. SYSTEM CONTEXT DIAGRAM
+
+```mermaid
+C4Context
+    title System Context: CBT-School
+
+    Person(admin, "Admin", "Manages users, academics, assessments, system settings")
+    Person(teacher, "Teacher", "Creates exams, manages questions, grades essays")
+    Person(student, "Student", "Takes exams, views results, downloads certificates")
+    Person(parent, "Parent", "Views child's results & certificates (future)")
+
+    System(cbt, "CBT-School", "Computer-Based Testing Platform for Schools")
+    System_Ext(db, "MySQL Database", "Persistent storage")
+    System_Ext(cdn, "CDN (Optional)", "Static asset delivery")
+    System_Ext(email, "Email Service", "Notifications, certificates")
+
+    Rel(admin, cbt, "Uses", "HTTPS")
+    Rel(teacher, cbt, "Uses", "HTTPS")
+    Rel(student, cbt, "Uses", "HTTPS")
+    Rel(parent, cbt, "Uses", "HTTPS")
+
+    Rel(cbt, db, "Reads/Writes", "SQL")
+    Rel(cbt, cdn, "Serves assets", "HTTPS")
+    Rel(cbt, email, "Sends emails", "SMTP/API")
+```
+
+---
+
+## 2. CONTAINER DIAGRAM
+
+```mermaid
+C4Container
+    title Container Diagram: CBT-School
+
+    Person(user, "User (Admin/Teacher/Student)")
+
+    Container(web, "Web App", "PHP 8.2 + Nginx", "Serves HTML, handles requests, runs business logic")
+    ContainerDb(db, "Database", "MySQL 8.0", "Stores users, exams, questions, results, logs")
+    Container(cdn, "CDN", "CloudFlare/BunnyCDN", "Caches CSS, JS, images, fonts")
+
+    Rel(user, web, "HTTPS", "Browser")
+    Rel(web, db, "SQL", "PDO")
+    Rel(web, cdn, "Static assets", "HTTPS")
+```
+
+---
+
+## 3. COMPONENT DIAGRAM (Core Framework)
+
+```mermaid
+C4Component
+    title Component Diagram: Core Framework (src/Core)
+
+    Container(web, "Web App", "PHP 8.2")
+
+    Component(app, "App", "Bootstrap, DI Container", "Application entry point")
+    Component(router, "Router", "Route registration & dispatch", "FastRoute-style")
+    Component(request, "Request", "HTTP Request wrapper", "PSR-7 like")
+    Component(response, "Response", "HTTP Response builder", "JSON, HTML, Redirect")
+    Component(view, "View", "Template renderer", "Plain PHP + layouts")
+    Component(config, "Config", "Configuration loader", "PHP arrays from config/")
+    Component(database, "Database", "PDO wrapper + Query Builder", "Fluent query builder")
+    Component(session, "Session", "Session management", "Native PHP sessions")
+    Component(csrf, "Csrf", "Token generation/validation", "Per-session + per-form")
+    Component(validator, "Validator", "Validation rules", "Laravel-like rules")
+    Component(helpers, "Helpers", "Global functions", "route(), asset(), can(), h(), etc.")
+
+    Rel(app, router, "Uses")
+    Rel(app, config, "Uses")
+    Rel(app, database, "Uses")
+    Rel(app, session, "Uses")
+    Rel(router, request, "Creates")
+    Rel(router, response, "Returns")
+    Rel(view, helpers, "Uses in templates")
+    Rel(validator, request, "Validates")
+    Rel(csrf, session, "Stores token in")
+```
+
+---
+
+## 4. AUTHORIZATION FLOW (ModuleAccess)
+
+```mermaid
+flowchart TD
+    A[Controller / Template] --> B{can($module)}
+    B --> C[ModuleAccess::bladeCan]
+    C --> D[Get Current User]
+    D --> E{User authenticated?}
+    E -- No --> F[Return false]
+    E -- Yes --> G[Get User Role]
+    G --> H[Lookup roleModuleMap[$role]]
+    H --> I{Wildcard match?}
+    I -- Yes --> J[Return true]
+    I -- No --> K[Exact match?]
+    K -- Yes --> J
+    K -- No --> F
+    
+    style F fill:#ffcccc
+    style J fill:#ccffcc
+```
+
+---
+
+## 5. LAYOUT SELECTION FLOW
+
+```mermaid
+flowchart TD
+    A[Route Matched] --> B{Route Group}
+    B -- /admin/* --> C[layout-admin.php]
+    B -- /student/exams/*/take --> D[layout-exam.php]
+    B -- /login, /register --> E[layout-auth.php]
+    B -- / (public) --> F[layout-public.php]
+    B -- /teacher/*, /student/* (non-exam) --> G[layout-app.php]
+    
+    C --> H[Inject SCHOOL_CONFIG]
+    D --> H
+    E --> H
+    F --> H
+    G --> H
+    
+    H --> I[Load design-system.css]
+    H --> J[Load theme.js]
+    H --> K[Load layout-specific CSS/JS]
+    
+    I --> L[Apply CSS Custom Properties]
+    J --> M[theme.js reads SCHOOL_CONFIG]
+    M --> N[Set --school-* CSS vars]
+    N --> O[Update logo, favicon, title]
+```
+
+---
+
+## 6. EXAM TAKING SEQUENCE
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Student
+    participant Browser
+    participant ExamController
+    participant ExamSession
+    participant ExamJS
+    participant API
+
+    Student->>Browser: Clicks "Mulai Ujian"
+    Browser->>ExamController: GET /student/exams/{id}/take
+    ExamController->>ExamSession: Create session (in_progress)
+    ExamController->>Browser: Render exam.php + take.php
+    Browser->>ExamJS: Load exam.js, theme.js, design-system.css
+    ExamJS->>ExamJS: Init timer, palette, navigation, auto-save
+    
+    loop Every 30s / on answer change
+        ExamJS->>API: POST /api/exam/{id}/save (answers)
+        API->>ExamSession: Update answers
+    end
+    
+    alt Student clicks "Selesai"
+        Student->>Browser: Click Submit
+    else Timer reaches 0
+        ExamJS->>Browser: Auto-submit
+    end
+    
+    Browser->>API: POST /api/exam/{id}/submit
+    API->>ExamSession: Status = submitted
+    API->>API: Auto-grade MCQ/TF/FillBlank/Matching/Ordering
+    API->>API: Queue Essay/Coding for manual grading
+    API->>ExamSession: Calculate result, create results record
+    API-->>Browser: Redirect to result page
+    Browser->>Student: Show result
+```
+
+---
+
+## 7. QUESTION TYPE RENDERING PIPELINE
+
+```mermaid
+flowchart LR
+    A[Question Data] --> B{Type}
+    B -->|mcq| C[partials/questions/mcq/render.php]
+    B -->|essay| D[partials/questions/essay/render.php]
+    B -->|truefalse| E[partials/questions/truefalse/render.php]
+    B -->|fillblank| F[partials/questions/fillblank/render.php]
+    B -->|matching| G[partials/questions/matching/render.php]
+    B -->|ordering| H[partials/questions/ordering/render.php]
+    B -->|coding| I[partials/questions/coding/render.php]
+    
+    C --> J[HTML + data-question-id]
+    D --> J
+    E --> J
+    F --> J
+    G --> J
+    H --> J
+    I --> J
+    
+    J --> K[exam.js QuestionCard]
+    K --> L[Event: answerChange]
+    L --> M[Auto-save Queue]
+```
+
+---
+
+## 8. DATA MODEL (ERD - Simplified)
+
+```mermaid
+erDiagram
+    USERS ||--o{ ROLES : has
+    USERS ||--o{ EXAM_SESSIONS : takes
+    USERS ||--o{ ENROLLMENTS : enrolled_in
+    USERS ||--o{ ACTIVITY_LOGS : generates
+    
+    ROLES ||--o{ ROLE_PERMISSIONS : has
+    PERMISSIONS ||--o{ ROLE_PERMISSIONS : assigned_to
+    
+    ACADEMIC_YEARS ||--o{ SEMESTERS : contains
+    ACADEMIC_YEARS ||--o{ CLASSES : has
+    ACADEMIC_YEARS ||--o{ EXAMS : belongs_to
+    ACADEMIC_YEARS ||--o{ ENROLLMENTS : references
+    
+    SEMESTERS ||--o{ CLASSES : has
+    SEMESTERS ||--o{ EXAMS : belongs_to
+    SEMESTERS ||--o{ ENROLLMENTS : references
+    
+    CLASSES ||--o{ SUBJECTS : teaches
+    CLASSES ||--o{ ENROLLMENTS : has_students
+    CLASSES ||--o{ EXAMS : has
+    
+    SUBJECTS ||--o{ EXAMS : tested_in
+    SUBJECTS ||--o{ QUESTIONS : categorized_in
+    SUBJECTS ||--o{ CLASS_SUBJECTS : taught_in
+    
+    EXAMS ||--o{ QUESTIONS : contains
+    EXAMS ||--o{ EXAM_SESSIONS : attempted_via
+    EXAMS ||--o{ RESULTS : produces
+    
+    QUESTIONS ||--o{ ANSWERS : answered_in
+    
+    EXAM_SESSIONS ||--o{ ANSWERS : records
+    EXAM_SESSIONS ||--o{ RESULTS : generates
+    
+    RESULTS ||--o{ CERTIFICATES : may_generate
+    
+    ANNOUNCEMENTS }|--o{ USERS : targets
+    NOTIFICATIONS }|--o{ USERS : notifies
+```
+
+---
+
+## 9. DEPLOYMENT TOPOLOGY
+
+```mermaid
+graph TB
+    subgraph "Internet"
+        Client[Browser]
+        CDN[CDN Edge]
+    end
+    
+    subgraph "VPS / Cloud Server"
+        Nginx[Nginx :443]
+        PHP[PHP-FPM Pool]
+        Redis[(Redis :6379)]
+    end
+    
+    subgraph "Database Server"
+        MySQL[(MySQL :3306)]
+    end
+    
+    Client -->|HTTPS| CDN
+    CDN -->|Cache Miss| Nginx
+    Nginx -->|Static Assets| Client
+    Nginx -->|PHP Requests| PHP
+    PHP -->|SQL| MySQL
+    PHP -->|Sessions/Cache| Redis
+    PHP -->|File Storage| LocalDisk[/var/www/cbt-school/public/uploads]
+    
+    style CDN fill:#e1f5fe
+    style Redis fill:#fff3e0
+    style MySQL fill:#e8f5e9
+```
+
+---
+
+## 10. ASSET PIPELINE
+
+```mermaid
+flowchart LR
+    A[design-system.css<br/>103KB] --> B[Nginx gzip/brotli]
+    C[theme.js<br/>2KB] --> B
+    D[exam.js<br/>44KB] --> B
+    E[Modal.js<br/>13KB] --> B
+    F[Google Fonts<br/>Inter] --> G[Preconnect + Preload]
+    
+    B --> H[Browser Cache<br/>max-age=31536000<br/>immutable]
+    G --> H
+    
+    H --> I[theme.js Runtime]
+    I --> J[Read SCHOOL_CONFIG]
+    J --> K[Set CSS Custom Properties]
+    K --> L[Update DOM: logo, favicon, title]
+    
+    style A fill:#f3e5f5
+    style C fill:#e3f2fd
+    style D fill:#e8f5e9
+    style E fill:#fff3e0
+```
+
+---
+
+## 11. STATE MACHINE: EXAM SESSION
+
+```mermaid
+stateDiagram-v2
+    [*] --> created: ExamController@take()
+    created --> in_progress: Session record created
+    in_progress --> in_progress: Auto-save (answers updated)
+    in_progress --> submitted: Student submits OR timer expires
+    submitted --> graded_auto: MCQ/TF/FillBlank/Matching/Ordering
+    submitted --> grading_pending: Essay/Coding (manual)
+    graded_auto --> completed: All auto-graded
+    grading_pending --> grading_in_progress: Teacher starts grading
+    grading_in_progress --> completed: All graded
+    completed --> certified: Passed & certificate generated
+    completed --> [*]: Failed or no certificate
+    certified --> [*]
+    
+    note right of in_progress: Timer running\nPalette active\nAuto-save every 30s
+    note right of grading_pending: Teacher grading queue\nNotification sent
+```
+
+---
+
+## 12. SIDEBAR NAV PERMISSION GATING
+
+```mermaid
+flowchart TD
+    A[Render sidebar-nav.blade.php] --> B[Iterate $navItems]
+    B --> C{can($section.permission)?}
+    C -- No --> D[Skip section]
+    C -- Yes --> E{Has children?}
+    E -- No --> F[Render single link<br/>can($item.permission)]
+    E -- Yes --> G[Render <details> group]
+    G --> H[Iterate children]
+    H --> I{can($child.permission)?}
+    I -- No --> J[Skip child]
+    I -- Yes --> K[Render <a> with active state]
+    
+    F --> L[request()->routeIs()<br/>for active class]
+    K --> L
+    
+    style D fill:#ffcccc
+    style J fill:#ffcccc
+    style L fill:#e8f5e9
+```

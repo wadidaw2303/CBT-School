@@ -1,0 +1,25 @@
+-- Migration: 002_create_users_table.sql
+CREATE TABLE IF NOT EXISTS `users` (
+    `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `uuid` CHAR(36) NOT NULL,
+    `role_id` INT UNSIGNED NOT NULL,
+    `name` VARCHAR(150) NOT NULL,
+    `email` VARCHAR(150) NOT NULL,
+    `password_hash` VARCHAR(255) NOT NULL,
+    `avatar` VARCHAR(255) NULL,
+    `phone` VARCHAR(20) NULL,
+    `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+    `email_verified_at` TIMESTAMP NULL DEFAULT NULL,
+    `last_login_at` TIMESTAMP NULL DEFAULT NULL,
+    `remember_token` VARCHAR(64) NULL,
+    `remember_token_expires` TIMESTAMP NULL DEFAULT NULL,
+    `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `users_uuid_unique` (`uuid`),
+    UNIQUE KEY `users_email_unique` (`email`),
+    KEY `users_role_id_foreign` (`role_id`),
+    KEY `users_is_active_index` (`is_active`),
+    KEY `users_remember_token_index` (`remember_token`),
+    CONSTRAINT `users_role_id_foreign` FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
